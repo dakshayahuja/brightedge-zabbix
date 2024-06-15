@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrightEdge - Zabbix Solution Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+        }
+        pre, code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: small;
+        }
+        pre {
+            background: #2d2d2d;
+            padding: 10px;
+            border: 1px solid #444;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: #e0e0e0;
+        }
+        code {
+            background: #2d2d2d;
+            padding: 2px 4px;
+            border: 1px solid #444;
+            display: inline-block;
+            white-space: pre-wrap;
+            color: #e0e0e0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: #1e1e1e;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BrightEdge - Zabbix Monitoring Solution Documentation</h1>
+        
+        <h2>Summary</h2>
+        <p>This documentation outlines the steps to set up a Zabbix monitoring solution that checks disk space usage and alerts when any filesystem has less than 20% free space. The solution involves writing Linux and Python scripts, configuring the Zabbix agent and server, and ensuring proper permissions. The Zabbix server has been deployed on an AWS VM using CentOS Stream 9.</p>
+        <p>The Zabbix dashboard can be accessed at <a href="https://brightedge.dakshayahuja.in/" target="_blank">https://brightedge.dakshayahuja.in/</a> using the credentials:<br> Username - Admin<br>Password - zabbix</p>
+
+        <h2>Steps</h2>
+        
+        <h3>1. Write a Linux Shell Script</h3>
+        <p>Write a Linux shell script that determines if any of the mounted file systems have less than 20% free disk space.</p>
+        <pre><code>#!/bin/bash
+
+# Check all mounted file systems
+df -h | awk '{if (NR!=1 && $5+0 > 80) print $0}' > /tmp/disk_usage_report.txt
+
+# If any file system is above 80% usage, alert
+if [ -s /tmp/disk_usage_report.txt]; then
+  echo "Disk space usage is above 80%"
+  exit 1
+else
+  echo "Disk space usage is under control"
+  exit 0
+fi
+</code></pre>
+        
+        <h3>2. Write a Python Equivalent Script</h3>
+        <p>Write a Python script that performs the same check.</p>
+        <pre><code>import subprocess
+
+def check_disk_space():
+    result = subprocess.run(['df', '-h'], capture_output=True, text=True)
+    lines = result.stdout.splitlines()
+
+    for line in lines[1:]:
+        parts = line.split()
+        usage = int(parts[4].strip('%'))
+        if usage > 80:
+            print("Disk space usage is above 80%")
+            return 1
+
+    print("Disk space usage is under control")
+    return 0
+
+if __name__ == "__main__":
+    exit(check_disk_space())
+</code></pre>
+
+        <h3>3. Create a Python Script for Zabbix</h3>
+        <p>Create a Python script named <code>zabbix_server.py</code> that checks disk space usage and returns "True" if any filesystem has less than 20% free space, otherwise returns "False".</p>
+        <pre><code>#!/usr/bin/env python3
+import subprocess
+
+def check_disk_space():
+    result = subprocess.run(['df', '-h'], capture_output=True, text=True)
+    lines = result.stdout.splitlines()
+
+    for line in lines[1:]:
+        parts are line.split()
+        usage is int(parts[4].strip('%'))
+        if usage > 80:
+            return "True"
+
+    return "False"
+
+if __name__ == "__main__":
+    print(check_disk_space())
+</code></pre>
+        
+        <h3>4. Set Execute Permissions for the Python Script</h3>
+        <p>Ensure the Python script has execute permissions:</p>
+        <pre><code>chmod +x /home/ec2-user/zabbix_server.py
+chown zabbix:zabbix /home/ec2-user/zabbix_server.py
+</code></pre>
+        
+        <h3>5. Configure Sudoers for Zabbix User</h3>
+        <p>Edit the sudoers file to allow the Zabbix user to run the script without a password:</p>
+        <pre><code>sudo visudo
+</code></pre>
+        <p>Add the following line:</p>
+        <pre><code>zabbix ALL=(ALL) NOPASSWD: /usr/bin/env python3 /home/ec2-user/zabbix_server.py
+</code></pre>
+        
+        <h3>6. Update Zabbix Agent Configuration</h3>
+        <p>Edit the Zabbix agent configuration file:</p>
+        <pre><code>sudo vim /etc/zabbix/zabbix_agentd.conf
+</code></pre>
+        <p>Add or update the following line:</p>
+        <pre><code>UserParameter=disk.space.check,sudo /usr/bin/env python3 /home/ec2-user/zabbix_server.py
+</code></pre>
+        
+        <h3>7. Restart the Zabbix Agent</h3>
+        <p>Restart the Zabbix agent to apply the changes:</p>
+        <pre><code>sudo systemctl restart zabbix-agent
+</code></pre>
+        
+        <h3>8. Verify the Configuration</h3>
+        <ul>
+            <li><strong>Run the script manually</strong> to ensure it returns "True" or "False":</li>
+        </ul>
+        <pre><code>sudo -u zabbix /usr/bin/env python3 /home/ec2-user/zabbix_server.py
+</code></pre>
+        <ul>
+            <li><strong>Check the Zabbix agent logs</strong> for any error messages:</li>
+        </ul>
+        <pre><code>sudo tail -f /var/log/zabbix/zabbix_agentd.log
+</code></pre>
+        <ul>
+            <li>In the <strong>Zabbix frontend</strong>, configure an item to use the key <code>disk.space.check</code> and set the type to "Text". Verify that it retrieves the correct value from the agent.</li>
+        </ul>
+        
+        <h3>9. Temporarily Disable SELinux</h3>
+        <p>If you encounter permission issues, temporarily disable SELinux to see if it resolves the problem:</p>
+        <pre><code>sudo setenforce 0
+</code></pre>
+        
+        <h3>10. Creating a Disk with More Than 80% Space Utilized</h3>
+        <p>To test the script, we created a loopback device with more than 80% disk usage:</p>
+        <ol>
+            <li><strong>Create a Loopback File:</strong></li>
+        </ol>
+        <pre><code>sudo dd if=/dev/zero of=/home/ec2-user/loopback.img bs=1M count=2048
+</code></pre>
+        <ol start="2">
+            <li><strong>Set Up the Loopback Device:</strong></li>
+        </ol>
+        <pre><code>sudo losetup /dev/loop0 /home/ec2-user/loopback.img
+</code></pre>
+        <ol start="3">
+            <li><strong>Create a Filesystem on the Loopback Device:</strong></li>
+        </ol>
+        <pre><code>sudo mkfs.ext4 /dev/loop0
+</code></pre>
+        <ol start="4">
+            <li><strong>Mount the Loopback Device:</strong></li>
+        </ol>
+        <pre><code>sudo mkdir /mnt/loopback
+sudo mount /dev/loop0 /mnt/loopback
+</code></pre>
+        <ol start="5">
+            <li><strong>Fill the Loopback Device:</strong></li>
+        </ol>
+        <pre><code>sudo dd if=/dev/zero of=/mnt/loopback/largefile bs=1M count=1900
+</code></pre>
+        
+        <h2>Screenshots</h2>
+        
+        <h3>1. Script Execution</h3>
+        <img src="./assets/ScriptsOutput.png" alt="Script Execution">
+
+        <h3>2. Dashboard Overview</h3>
+        <img src="./assets/Dashboard.png" alt="Zabbix Dashboard Overview">
+
+        <h3>3. Zabbix Item Configuration</h3>
+        <img src="./assets/CheckDiskSpaceItem.png" alt="Zabbix Item Configuration">
+
+        <h3>4. Zabbix Test Item</h3>
+        <img src="./assets/TestItemValue.png" alt="Script Execution">
+        
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</body>
+</html>
